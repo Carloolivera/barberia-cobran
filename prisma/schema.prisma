@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model KnownClient {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model Service {
+  id              String        @id @default(cuid())
+  name            String
+  durationMinutes Int
+  price           Decimal       @db.Decimal(10, 2)
+  active          Boolean       @default(true)
+  order           Int           @default(0)
+  appointments    Appointment[]
+  createdAt       DateTime      @default(now())
+}
+
+model WorkingHour {
+  id        String  @id @default(cuid())
+  dayOfWeek Int     // 0=Dom, 1=Lun, 2=Mar, 3=Mie, 4=Jue, 5=Vie, 6=Sab
+  startTime String  // "09:00"
+  endTime   String  // "18:00"
+  active    Boolean @default(true)
+
+  @@unique([dayOfWeek])
+}
+
+model BlockedDate {
+  id     String   @id @default(cuid())
+  date   DateTime @db.Date
+  reason String?
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  clientName      String
+  clientPhone     String
+  serviceId       String
+  service         Service           @relation(fields: [serviceId], references: [id])
+  appointmentDate DateTime          @db.Date
+  appointmentTime String            // "10:30"
+  status          AppointmentStatus @default(PENDING)
+  isKnownClient   Boolean           @default(false)
+  notes           String?
+  createdAt       DateTime          @default(now())
+
+  @@index([appointmentDate])
+  @@index([clientPhone])
+  @@index([status])
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
