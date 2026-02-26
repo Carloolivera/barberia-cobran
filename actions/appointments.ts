@@ -35,7 +35,7 @@ export async function getAppointments(filters?: {
     clientPhone: a.clientPhone,
     serviceName: a.service.name,
     durationMinutes: a.service.durationMinutes,
-    appointmentDate: a.appointmentDate.toISOString().split("T")[0],
+    appointmentDate: (() => { const iso = a.appointmentDate.toISOString().split("T")[0]; const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; })(),
     appointmentTime: a.appointmentTime,
     status: a.status,
     isKnownClient: a.isKnownClient,

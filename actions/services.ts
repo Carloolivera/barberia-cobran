@@ -19,10 +19,12 @@ const serviceSchema = z.object({
 });
 
 export async function getServices(onlyActive = false) {
-  return db.service.findMany({
+  const services = await db.service.findMany({
     where: onlyActive ? { active: true } : undefined,
     orderBy: { order: "asc" },
   });
+  // Convert Decimal → number so it's serializable to Client Components
+  return services.map((s) => ({ ...s, price: Number(s.price) }));
 }
 
 export async function createService(data: {
