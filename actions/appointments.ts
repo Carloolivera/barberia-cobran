@@ -117,3 +117,13 @@ export async function addNoteToAppointment(id: string, notes: string) {
   revalidatePath("/admin/turnos");
   return { success: true };
 }
+
+export async function deleteAppointment(id: string) {
+  await requireAdmin();
+
+  await db.appointment.delete({ where: { id } });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/turnos");
+  return { success: true };
+}

@@ -6,7 +6,17 @@ import { getAvailableSlots, createAppointment } from "@/actions/booking";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Clock, DollarSign, ChevronLeft, Loader2, AlertCircle } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  CheckCircle2,
+  Clock,
+  ChevronLeft,
+  Loader2,
+  AlertCircle,
+  Scissors,
+  Check,
+  CalendarIcon,
+} from "lucide-react";
 
 type Service = { id: string; name: string; durationMinutes: number; price: number };
 
@@ -26,7 +36,33 @@ type BookingResult = {
   };
 };
 
-const STEPS = ["Servicio", "Fecha", "Horario", "Datos", "Listo"] as const;
+const STEP_LABELS = ["Servicio", "Fecha", "Horario", "Datos"] as const;
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const MONTH_NAMES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+function toDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatDateEs(dateStr: string): string {
+  const [, m, d] = dateStr.split("-");
+  return `${parseInt(d)} de ${MONTH_NAMES[parseInt(m) - 1]}`;
+}
+
+// CSS vars to theme the Calendar for the dark/amber UI
+const calendarTheme = {
+  ["--primary" as string]: "#fbbf24",
+  ["--primary-foreground" as string]: "#18181b",
+  ["--background" as string]: "#27272a",
+  ["--foreground" as string]: "#fafafa",
+  ["--accent" as string]: "#3f3f46",
+  ["--accent-foreground" as string]: "#fafafa",
+  ["--muted-foreground" as string]: "#71717a",
+  ["--border" as string]: "#3f3f46",
+};
 
 export function BookingWizard({ services, activeDays, blockedDates }: Props) {
   const [step, setStep] = useState(0);
@@ -40,38 +76,26 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<BookingResult | null>(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
 
-  function isDateAvailable(dateStr: string): boolean {
-    const date = new Date(dateStr + "T00:00:00");
+  const maxDate = new Date();
+  maxDate.setDate(maxDate.getDate() + 14);
+  maxDate.setHours(23, 59, 59, 999);
+
+  function isDisabledDate(date: Date): boolean {
+    if (date < tomorrow || date > maxDate) return true;
     const dayOfWeek = date.getDay();
-    if (blockedDates.includes(dateStr)) return false;
-    if (!activeDays.includes(dayOfWeek)) return false;
-    return true;
-  }
-
-  function getMinDate() {
-    // Buscar el próximo día disponible (máx 7 días hacia adelante)
-    const d = new Date();
-    d.setDate(d.getDate() + 1); // mañana
-    for (let i = 0; i < 14; i++) {
-      const ds = d.toISOString().split("T")[0];
-      if (isDateAvailable(ds)) return ds;
-      d.setDate(d.getDate() + 1);
-    }
-    return "";
+    const dateStr = toDateStr(date);
+    return !activeDays.includes(dayOfWeek) || blockedDates.includes(dateStr);
   }
 
   async function handleDateSelect(date: string) {
     setSelectedDate(date);
     setSelectedTime("");
     setSlots([]);
-
     if (!date || !selectedService) return;
-    if (!isDateAvailable(date)) {
-      toast.error("Ese día no hay atención");
-      return;
-    }
 
     setLoadingSlots(true);
     const available = await getAvailableSlots(selectedService.id, date);
@@ -83,6 +107,17 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
     } else {
       setStep(2);
     }
+  }
+
+  function resetWizard() {
+    setStep(0);
+    setSelectedService(null);
+    setSelectedDate("");
+    setSelectedTime("");
+    setClientName("");
+    setClientPhone("");
+    setSlots([]);
+    setResult(null);
   }
 
   async function handleSubmit() {
@@ -111,66 +146,95 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
   // --- Step 4: Result ---
   if (step === 4 && result) {
     return (
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-8 text-center">
-        {result.status === "CONFIRMED" ? (
-          <>
-            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">¡Turno confirmado!</h2>
-            <p className="text-zinc-400 mb-6">Te esperamos en la barbería</p>
-          </>
-        ) : (
-          <>
-            <div className="w-16 h-16 bg-amber-400 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="w-8 h-8 text-zinc-900" />
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Solicitud recibida</h2>
-            <p className="text-zinc-400 mb-6">
-              Tu turno está pendiente de confirmación. El peluquero lo revisará pronto.
-            </p>
-          </>
-        )}
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-8">
+        <div className="text-center mb-6">
+          {result.status === "CONFIRMED" ? (
+            <>
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 className="w-8 h-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">¡Turno confirmado!</h2>
+              <p className="text-zinc-400">Te esperamos en la barbería</p>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-amber-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-zinc-900" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Solicitud recibida</h2>
+              <p className="text-zinc-400 mb-1">
+                Tu turno está{" "}
+                <span className="text-amber-400 font-semibold">pendiente de confirmación</span>.
+              </p>
+              <p className="text-zinc-500 text-sm">
+                El barbero lo revisará y confirmará a la brevedad.
+              </p>
+            </>
+          )}
+        </div>
 
-        <div className="bg-zinc-800 rounded-xl p-4 text-left space-y-2 mb-6">
+        <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-4 space-y-2 mb-6 text-sm">
           <DetailRow label="Nombre" value={result.appointment.clientName} />
           <DetailRow label="Servicio" value={result.appointment.serviceName} />
           <DetailRow label="Fecha" value={result.appointment.appointmentDate} />
           <DetailRow label="Hora" value={result.appointment.appointmentTime + " hs"} />
           <DetailRow
             label="Estado"
-            value={result.status === "CONFIRMED" ? "Confirmado ✓" : "Pendiente de aprobación"}
+            value={result.status === "CONFIRMED" ? "✓ Confirmado" : "⏳ Pendiente de aprobación"}
           />
         </div>
 
-        <a
-          href="/mi-turno"
-          className="text-amber-400 hover:text-amber-300 text-sm underline"
-        >
-          Consultá el estado de tu turno →
-        </a>
+        <div className="space-y-3">
+          <a
+            href="/mi-turno"
+            className="block w-full text-center py-3 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-white text-sm transition-colors"
+          >
+            Consultá el estado de tu turno →
+          </a>
+          <button
+            onClick={resetWizard}
+            className="block w-full text-center py-2 text-zinc-500 hover:text-zinc-300 text-sm transition-colors cursor-pointer"
+          >
+            Hacer otra reserva
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Steps indicator */}
-      <div className="flex items-center justify-center gap-2">
-        {STEPS.slice(0, 4).map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
-            <div
-              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                i < step
-                  ? "bg-amber-400 text-zinc-900"
-                  : i === step
-                  ? "bg-amber-400 text-zinc-900"
-                  : "bg-zinc-800 text-zinc-500"
-              }`}
-            >
-              {i < step ? "✓" : i + 1}
+      {/* Step indicator with labels */}
+      <div className="flex items-start justify-center">
+        {STEP_LABELS.map((label, i) => (
+          <div key={label} className="flex items-start">
+            <div className="flex flex-col items-center w-16">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  i < step
+                    ? "bg-amber-400 text-zinc-900"
+                    : i === step
+                    ? "bg-amber-400 text-zinc-900 ring-4 ring-amber-400/20"
+                    : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                }`}
+              >
+                {i < step ? <Check className="w-4 h-4" /> : i + 1}
+              </div>
+              <span
+                className={`text-[11px] mt-1.5 font-medium text-center leading-tight ${
+                  i <= step ? "text-amber-400" : "text-zinc-600"
+                }`}
+              >
+                {label}
+              </span>
             </div>
-            {i < 3 && <div className={`w-8 h-0.5 ${i < step ? "bg-amber-400" : "bg-zinc-700"}`} />}
+            {i < 3 && (
+              <div
+                className={`w-8 h-0.5 mt-4 flex-shrink-0 ${
+                  i < step ? "bg-amber-400" : "bg-zinc-700"
+                }`}
+              />
+            )}
           </div>
         ))}
       </div>
@@ -186,17 +250,18 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
                   setSelectedService(s);
                   setStep(1);
                 }}
-                className="w-full flex items-center justify-between p-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-amber-400 rounded-xl transition-all cursor-pointer group"
+                className="w-full flex items-center gap-4 p-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-amber-400 rounded-xl transition-all cursor-pointer group"
               >
-                <div className="text-left">
+                <div className="w-10 h-10 rounded-lg bg-zinc-700 group-hover:bg-amber-400/10 border border-zinc-600 group-hover:border-amber-400/50 flex items-center justify-center flex-shrink-0 transition-all">
+                  <Scissors className="w-5 h-5 text-zinc-400 group-hover:text-amber-400 transition-colors" />
+                </div>
+                <div className="text-left flex-1">
                   <p className="font-semibold text-white group-hover:text-amber-400 transition-colors">
                     {s.name}
                   </p>
-                  <p className="text-sm text-zinc-500 flex items-center gap-3 mt-0.5">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {s.durationMinutes} min
-                    </span>
+                  <p className="text-sm text-zinc-500 flex items-center gap-1 mt-0.5">
+                    <Clock className="w-3 h-3" />
+                    {s.durationMinutes} min
                   </p>
                 </div>
                 <div className="text-amber-400 font-bold text-lg">
@@ -212,27 +277,38 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
       {step === 1 && selectedService && (
         <StepCard
           title="¿Qué día querés venir?"
-          back={() => { setStep(0); setSelectedDate(""); setSlots([]); }}
+          back={() => {
+            setStep(0);
+            setSelectedDate("");
+            setSlots([]);
+          }}
           subtitle={`Servicio: ${selectedService.name}`}
         >
-          <div className="space-y-3">
-            <p className="text-xs text-zinc-500">
+          <div className="space-y-4">
+            <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+              <CalendarIcon className="w-3.5 h-3.5" />
               Días disponibles:{" "}
-              {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
-                .filter((_, i) => activeDays.includes(i))
-                .join(", ")}
+              <span className="text-zinc-400">
+                {DAY_NAMES.filter((_, i) => activeDays.includes(i)).join(", ")}
+              </span>
             </p>
-            <input
-              type="date"
-              min={getMinDate() || today}
-              value={selectedDate}
-              onChange={(e) => handleDateSelect(e.target.value)}
-              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-xl px-4 py-3 text-base focus:outline-none focus:border-amber-400 cursor-pointer"
-            />
+
+            <div className="flex justify-center rounded-xl overflow-hidden" style={calendarTheme}>
+              <Calendar
+                mode="single"
+                selected={selectedDate ? new Date(selectedDate + "T12:00:00") : undefined}
+                onSelect={(date) => {
+                  if (date) handleDateSelect(toDateStr(date));
+                }}
+                disabled={isDisabledDate}
+                className="bg-zinc-800 rounded-xl p-2"
+              />
+            </div>
+
             {loadingSlots && (
               <div className="flex items-center justify-center gap-2 text-zinc-400 py-4">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Buscando horarios...</span>
+                <span className="text-sm">Buscando horarios disponibles...</span>
               </div>
             )}
           </div>
@@ -243,8 +319,11 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
       {step === 2 && selectedDate && (
         <StepCard
           title="¿A qué hora?"
-          back={() => { setStep(1); setSelectedTime(""); }}
-          subtitle={`${selectedDate} · ${selectedService?.name}`}
+          back={() => {
+            setStep(1);
+            setSelectedTime("");
+          }}
+          subtitle={`${formatDateEs(selectedDate)} · ${selectedService?.name}`}
         >
           {slots.length === 0 ? (
             <p className="text-zinc-500 text-center py-6">No hay horarios disponibles</p>
@@ -276,7 +355,7 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
         <StepCard
           title="Tus datos"
           back={() => setStep(2)}
-          subtitle={`${selectedDate} a las ${selectedTime} hs · ${selectedService?.name}`}
+          subtitle={`${formatDateEs(selectedDate)} a las ${selectedTime} hs · ${selectedService?.name}`}
         >
           <div className="space-y-4">
             <div>
@@ -302,12 +381,14 @@ export function BookingWizard({ services, activeDays, blockedDates }: Props) {
               </p>
             </div>
 
-            {/* Resumen */}
-            <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-4 space-y-2 text-sm mt-2">
+            <div className="bg-zinc-800 border border-zinc-700 rounded-xl p-4 space-y-2 text-sm">
               <DetailRow label="Servicio" value={selectedService?.name ?? ""} />
-              <DetailRow label="Fecha" value={selectedDate} />
+              <DetailRow label="Fecha" value={formatDateEs(selectedDate)} />
               <DetailRow label="Hora" value={`${selectedTime} hs`} />
-              <DetailRow label="Precio" value={`$${selectedService?.price.toLocaleString("es-AR")}`} />
+              <DetailRow
+                label="Precio"
+                value={`$${selectedService?.price.toLocaleString("es-AR")}`}
+              />
             </div>
 
             <Button

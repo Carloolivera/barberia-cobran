@@ -23,8 +23,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { AppointmentStatusBadge } from "./appointment-status-badge";
-import { approveAppointment, rejectAppointment, completeAppointment } from "@/actions/appointments";
-import { CheckCircle2, XCircle, CheckSquare, Users } from "lucide-react";
+import { approveAppointment, rejectAppointment, completeAppointment, deleteAppointment } from "@/actions/appointments";
+import { CheckCircle2, XCircle, CheckSquare, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 type Appointment = {
@@ -51,9 +51,11 @@ const STATUS_FILTERS = [
 export function AppointmentsTable({
   appointments,
   currentStatus,
+  currentDate,
 }: {
   appointments: Appointment[];
   currentStatus?: string;
+  currentDate?: string;
 }) {
   const router = useRouter();
   const [rejectDialog, setRejectDialog] = useState<{
@@ -61,8 +63,21 @@ export function AppointmentsTable({
     appointmentId: string;
     clientName: string;
   }>({ open: false, appointmentId: "", clientName: "" });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    appointmentId: string;
+    clientName: string;
+  }>({ open: false, appointmentId: "", clientName: "" });
   const [rejectReason, setRejectReason] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
+
+  function buildUrl(status?: string, date?: string) {
+    const params = new URLSearchParams();
+    if (status && status !== "all") params.set("status", status);
+    if (date) params.set("date", date);
+    const qs = params.toString();
+    return `/admin/turnos${qs ? `?${qs}` : ""}`;
+  }
 
   async function handleApprove(id: string) {
     setLoading(id + "-approve");
@@ -96,14 +111,25 @@ export function AppointmentsTable({
     }
   }
 
+  async function handleDelete() {
+    setLoading(deleteDialog.appointmentId + "-delete");
+    const result = await deleteAppointment(deleteDialog.appointmentId);
+    setLoading(null);
+    if (result.success) {
+      toast.success("Turno eliminado");
+      setDeleteDialog({ open: false, appointmentId: "", clientName: "" });
+      router.refresh();
+    }
+  }
+
   return (
     <div className="space-y-4">
-      {/* Filtros de status */}
-      <div className="flex flex-wrap gap-2">
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-2">
         {STATUS_FILTERS.map((f) => (
           <Link
             key={f.value}
-            href={f.value === "all" ? "/admin/turnos" : `/admin/turnos?status=${f.value}`}
+            href={buildUrl(f.value, currentDate)}
             className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
               (currentStatus ?? "all") === f.value
                 ? "bg-zinc-900 text-white"
@@ -113,6 +139,22 @@ export function AppointmentsTable({
             {f.label}
           </Link>
         ))}
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            type="date"
+            value={currentDate ?? ""}
+            onChange={(e) => router.push(buildUrl(currentStatus, e.target.value || undefined))}
+            className="text-sm border rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+          {(currentStatus || currentDate) && (
+            <Link
+              href="/admin/turnos"
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Limpiar
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Tabla */}
@@ -198,6 +240,21 @@ export function AppointmentsTable({
                           Completar
                         </Button>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-500 border-red-100 hover:bg-red-50 cursor-pointer"
+                        disabled={loading === appt.id + "-delete"}
+                        onClick={() =>
+                          setDeleteDialog({
+                            open: true,
+                            appointmentId: appt.id,
+                            clientName: appt.clientName,
+                          })
+                        }
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -206,6 +263,39 @@ export function AppointmentsTable({
           </Table>
         )}
       </div>
+
+      {/* Dialog eliminar */}
+      <Dialog
+        open={deleteDialog.open}
+        onOpenChange={(open) =>
+          setDeleteDialog({ open, appointmentId: "", clientName: "" })
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Eliminar turno de {deleteDialog.clientName}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-500">
+            Esta acción es irreversible. El turno será eliminado permanentemente.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialog({ open: false, appointmentId: "", clientName: "" })}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={!!loading}
+              className="cursor-pointer"
+            >
+              Eliminar turno
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog rechazar */}
       <Dialog
