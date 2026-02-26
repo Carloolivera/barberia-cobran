@@ -6,11 +6,24 @@ import { z } from "zod";
 
 const bookingSchema = z.object({
   serviceId: z.string().min(1),
-  appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  appointmentDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((d) => {
+      const year = parseInt(d.split("-")[0]);
+      return year >= 2025 && year <= 2030;
+    }, "Fecha inválida"),
   appointmentTime: z.string().regex(/^\d{2}:\d{2}$/),
   clientName: z.string().min(2).max(100),
   clientPhone: z.string().min(6).max(20),
 });
+
+// Format "YYYY-MM-DD" → "DD/MM/YYYY" for display
+function formatDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-");
+  if (!y || !m || !d) return isoDate;
+  return `${d}/${m}/${y}`;
+}
 
 export async function getAvailableSlots(serviceId: string, dateStr: string) {
   if (!serviceId || !dateStr) return [];
@@ -117,7 +130,7 @@ export async function createAppointment(formData: {
       id: appointment.id,
       clientName: appointment.clientName,
       serviceName: appointment.service.name,
-      appointmentDate: appointmentDate,
+      appointmentDate: formatDate(appointmentDate),
       appointmentTime: appointment.appointmentTime,
       status: appointment.status,
     },
@@ -145,7 +158,7 @@ export async function getAppointmentByPhone(phone: string) {
     id: appointment.id,
     clientName: appointment.clientName,
     serviceName: appointment.service.name,
-    appointmentDate: appointment.appointmentDate.toISOString().split("T")[0],
+    appointmentDate: formatDate(appointment.appointmentDate.toISOString().split("T")[0]),
     appointmentTime: appointment.appointmentTime,
     status: appointment.status,
     createdAt: appointment.createdAt.toISOString(),
