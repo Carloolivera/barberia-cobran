@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // We test the module in isolation — import after vi.resetModules() per test
 describe("checkRateLimit", () => {
@@ -55,5 +55,30 @@ describe("checkRateLimit", () => {
     for (let i = 0; i < 6; i++) checkRateLimit(ip);
     // Lookup prefix is a different bucket
     expect(checkRateLimit(`lookup:${ip}`).allowed).toBe(true);
+  });
+
+  it("returns blocked on subsequent call when still within block window", async () => {
+    const { checkRateLimit } = await import("@/lib/rate-limit");
+    const ip = "10.0.0.5";
+    // Exhaust limit to set blockedUntil
+    for (let i = 0; i < 6; i++) checkRateLimit(ip);
+    // 7th call: hits the early-return branch (blockedUntil && now < blockedUntil)
+    const result = checkRateLimit(ip);
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfterMs).toBeGreaterThan(0);
+  });
+
+  it("resets window after WINDOW_MS has passed", async () => {
+    vi.useFakeTimers();
+    const { checkRateLimit } = await import("@/lib/rate-limit");
+    const ip = "10.0.0.6";
+    // Make some attempts
+    for (let i = 0; i < 3; i++) checkRateLimit(ip);
+    // Advance time beyond the 15-minute window
+    vi.advanceTimersByTime(16 * 60 * 1000);
+    // Should be allowed again (window reset)
+    const result = checkRateLimit(ip);
+    expect(result.allowed).toBe(true);
+    vi.useRealTimers();
   });
 });

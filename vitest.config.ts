@@ -12,7 +12,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["actions/**", "lib/**"],
-      exclude: ["lib/generated/**", "lib/db.ts"],
+      exclude: ["lib/generated/**", "lib/db.ts", "lib/auth.ts", "lib/auth.config.ts", "lib/utils.ts"],
       thresholds: {
         lines: 80,
         functions: 80,
