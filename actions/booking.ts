@@ -2,7 +2,9 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const bookingSchema = z.object({
   serviceId: z.string().min(1),
@@ -139,6 +141,15 @@ export async function createAppointment(formData: {
 
 export async function getAppointmentByPhone(phone: string) {
   if (!phone || phone.trim().length < 6) return null;
+
+  const headersList = await headers();
+  const ip =
+    headersList.get("x-forwarded-for")?.split(",").pop()?.trim() ??
+    headersList.get("x-real-ip") ??
+    "unknown";
+
+  const { allowed } = checkRateLimit(`lookup:${ip}`);
+  if (!allowed) return null;
 
   const appointment = await db.appointment.findFirst({
     where: {
