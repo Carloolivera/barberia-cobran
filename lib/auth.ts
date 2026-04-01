@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { timingSafeEqual } from "crypto";
+import { compare } from "bcryptjs";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { authConfig } from "@/lib/auth.config";
@@ -10,16 +10,8 @@ const loginSchema = z.object({
   password: z.string().min(4),
 });
 
-// Timing-safe plain text comparison (avoids bcrypt $ issues in env vars)
-function checkPassword(input: string, stored: string): boolean {
-  try {
-    const a = Buffer.from(input);
-    const b = Buffer.from(stored);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
+async function checkPassword(input: string, hash: string): Promise<boolean> {
+  return compare(input, hash);
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -46,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const adminPassword = process.env.ADMIN_PASSWORD;
         if (!adminPassword) return null;
 
-        const valid = checkPassword(password, adminPassword);
+        const valid = await checkPassword(password, adminPassword);
         if (!valid) return null;
 
         resetRateLimit(ip);
